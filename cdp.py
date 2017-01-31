@@ -1,88 +1,64 @@
 #! /usr/bin/env python
-# A small script for cdp devices discovery
+#
+# This Python Application will use CDP to determine what port we are attached to in a switch.
+# It is very generic but can be extended to gather different fields within the CDP packet.
 
-import sys
 import pcapy
-import socket
 
 from dpkt import ethernet
-from dpkt import cdp
 
 
-def discover_neighbors(interface, timeout=100):
+def on_cdp_packet(header, data):
+    ether_frame = ethernet.Ethernet(data)
+
+    # The Start of the CDP Packet is at byte position 22, but the important data starts at byte 26.
+    # Let's also grab the len of the entire frame
+
+    eth_len = len (ether_frame)
+
+    start_of_cdp = 22
+
+    start_of_cdp_data = 26
+
+    # Start Iterating through the packet until we find the appropriate typeID fields.
+
+    counter = start_of_cdp_data
+
+    while counter<eth_len:
+
+        # Grab first two bytes, these are the TYPEID of the CDP Packet
+        typeid = 256 * ord(data[counter]) + ord(data[counter+1])
+        # Grab the next two bytes which represent the length of this setion of the CDP Packet
+        length = 256 * ord(data[counter+2]) + ord(data[counter+3])
+
+#       print "Typeid: "+str(typeid) + " Length: "+str(length)
+
+        # Finally, let's grab the entire data portion. This part houses the information fields
+        cdp_field = data[counter+4:counter+length]
+
+        # We are only looking for the Device ID (i.e., Switchname) and the Port ID that we are connected to.
+        # However, this code can grab and parse any other data that we received.
+
+        if typeid == 1:
+            #print "Device ID Found: "+cdp_field
+            switch_name = cdp_field
+        elif typeid == 3:
+            #print "Port ID Found: "+cdp_field
+            port_id = cdp_field
+        elif typeid == 6:
+            #print "Switch Type Found: "+cdp_field
+            switch_type = cdp_field
+
+        # Let's increment past that current field and move to the next "TYPEID" location
+        counter = counter + length
 
 
-    def on_cdp_packet(header, data):
-        ether_frame = ethernet.Ethernet(data)
 
-        start_of_cdp = 22
-#        print "Version: {:02x}".format(ord(data[start_of_cdp]))
-#        print "TTL: {:02x}".format(ord(data[start_of_cdp+1]))
-
-        start_of_dev = 26
-        devid_len = ord(data[start_of_dev+3])
-
-#        print "Length = "+str(devid_len)
-#        print "Length: {:02x} {:02x}".format(ord(data[28]),ord(data[29]))
-
-        switch_name = data[start_of_dev+4:start_of_dev+devid_len]
-#        print "Switch Name: "+switch_name
-
-        start_of_addr = start_of_dev+devid_len+1
-        addr_len = ord(data[start_of_addr+2])
-
-#        print "Address fields start at byte position: "+str(start_of_addr)
-#        print "Address length: "+str(addr_len)
-#        print "Length: {:02x} {:02x}".format(ord(data[start_of_addr+1]), ord(data[start_of_addr+2]))
-
-        start_of_portid = start_of_addr+addr_len
-        portid_len = ord(data[start_of_portid + 2])
-#        print "Port ID fields start at byte position: "+str(start_of_portid)
-#        print "Port ID length: "+str(portid_len)
-
-        port_id = data[start_of_portid+3:start_of_portid+portid_len-1]
-#        print "Port ID: "+port_id
-
-        print "Attached to: Switch Name: "+switch_name + " on Port: "+ port_id
-
-#        print "{:02x}".format(ether_frame[23])
+    print "\nWe are currently attached to: "+switch_name + " which is a: "+switch_type+ " on Port: "+ port_id
 
 
-#        ip = ether_frame.data
 
-#        for c in ether_frame:
-#            print "{:02x}".format(ord(c))
 
-#        cdp = ether_frame.CDP.data
-
-#        cdp_packet = cdp.CDP(ether_frame)
-
-#        print cdp_packet
-
-#
-#        cdp_packet = CDP.
-#        cdp_packet = ether_frame.CDP
-#        cdp_packet = ether_frame.data
-
-#        cdp_info = {}
-#        for info in cdp_packet.data:
-#            cdp_info.update({info.type: info.data})
-
-#        addresses = [socket.inet_ntoa(x.data) for x in cdp_info[cdp.CDP_ADDRESS]]
-#        print "Hey, %s is at %s." % (cdp_info[cdp.CDP_DEVID], ", ".join(addresses))
-
-    try:
-        pcap = pcapy.open_live(interface, 65535, 1, timeout)
-        pcap.setfilter('ether[20:2] == 0x2000')  # CDP filter
-
-        try:
-            while True:
-                # this is more responsive to  keyboard interrupts
-                pcap.dispatch(1, on_cdp_packet)
-        except KeyboardInterrupt, e:
-            pass
-    except Exception, e:
-        print e
 
 
 print "CDP Discover Application Starting..."
@@ -95,4 +71,20 @@ print "\n"
 disc_port = "en5"
 print "Currently Discovering CDP messages on port: "+disc_port
 
-discover_neighbors(disc_port)
+try:
+    # Let's Open up a live capture of the port
+
+    pcap = pcapy.open_live(disc_port, 65535, 1, 100)
+
+    # Let's set up a filter for the CDP packet ID 0x2000
+
+    pcap.setfilter('ether[20:2] == 0x2000')  # CDP filter
+
+    try:
+        while True:
+            # When the packet is received, we can call "on_cdp_packet" to process the data
+            pcap.dispatch(1, on_cdp_packet)
+    except KeyboardInterrupt, e:
+        pass
+except Exception, e:
+    print e
