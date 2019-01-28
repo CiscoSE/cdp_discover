@@ -14,7 +14,7 @@ This module requires two main libraries to access the ethernet port.
 [dpkt library - https://pypi.python.org/pypi/dpkt] (https://pypi.python.org/pypi/dpkt)
 
 
-##Output
+## Output
 ```
 CDP Discover Application Starting...
 All network interfaces on the computer are listed below:
@@ -30,7 +30,7 @@ We are currently attached to: BasementSwitch which is a: WS-C3560G-24PS on Port:
 
 We are currently attached to: 00180a526978 which is a: MS22 on Port: Port 14
 ```
-##Limitations
+## Limitations
 The application does not have alot of error checking, therefore your usage may vary.   In addition, I have only tested this on the Mac OSX and it works fine.    The switches that I have tested are:
 
 * Meraki MS 220
